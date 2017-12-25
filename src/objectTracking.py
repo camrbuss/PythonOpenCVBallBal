@@ -4,12 +4,12 @@ import matplotlib.pyplot as plt
 import time
 import serial 
 
-ser = serial.Serial('/dev/tty.usbmodem131', 9600)
+ser = serial.Serial('/dev/tty.usbmodem131', 9600) # Arduino on serial port change to com for windows
 
 
-cap = cv2.VideoCapture(1)
+cap = cv2.VideoCapture(1) # attach to web cam. Argument could be 0
 
-color = (255,0,255)
+color = (0,0,255) #Red circle to identify ball. 
 line_width = 2
 radius = 5
 point = (0,0)
@@ -20,21 +20,20 @@ integ = 0.0
 integPrev = float(0.0)
 
 cx = 300;
+cy = 0;
+
+Kp = 17.5
+Ki = 0.07
+Kd = 11.0
 
 
 
 while(True):
 
 	ret, frame = cap.read()
-	croppedFrame = frame[100:479-250, 0:639]
+	croppedFrame = frame[100:479-250, 0:639] # cropping the frame to help computation
 	gray = cv2.cvtColor(croppedFrame, cv2.COLOR_RGB2GRAY)
 
-	'''hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
-	h = hsv[:,:,0]
-	s = hsv[:,:,1]
-	v = hsv[:,:,2]
-	ret, thresh = cv2.threshold(s, 20, 255, cv2.THRESH_BINARY)
-	'''
 
 	thresh = 140
 	_, thresh = cv2.threshold(gray, thresh, 255, cv2.THRESH_BINARY)
@@ -45,10 +44,6 @@ while(True):
 	'''
 
 	_, contours, hierarchy = cv2.findContours(thresh, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
-
-	#_, numshapes, _, = hierarchy.shape
-	#print("Number of contours",numshapes)
-
 
 	for c in contours:
 		area = cv2.contourArea(c)
@@ -68,24 +63,23 @@ while(True):
 			break
 
 	raw = cv2.resize(frame, (0,0), fx=1,fy=1)
-	cv2.circle(raw, point, radius, color, line_width)
-
+	cv2.circle(raw, point, radius, color, line_width) # object
+	cv2.circle(raw, (setpoint,cy+100), 20, (0,255,0), 3) # setpoint
 	cv2.imshow("Original",raw)
 	cv2.imshow("Processed",thresh)
 
 
 	error = (setpoint - cx)
+	
 	errorAdj = float(error) / 100.0
 	
-	# P = 13 I = 0.25 D = 13
-	prop = 19.0 * errorAdj 
+	prop = 1.0 * errorAdj # Forcing float
 
-	integ = (0.3 * (error*0.033))+  integPrev 
-	print(error)
-	print(integPrev)
-	deriv = 13.0 * ((errorAdj - errorAdjPrev) / 0.033)
+	integ = (error*0.033) +  integPrev # Forcing float
 
-	desAngle = prop + integ + deriv
+	deriv = 1.0 * ((errorAdj - errorAdjPrev) / 0.033) # Forcing float
+
+	desAngle = Kp * prop + Ki * integ + Kd * deriv
 
 	desAngleAbs = 79 + int(desAngle)
 
@@ -99,7 +93,7 @@ while(True):
 
 	ser.write(str(unichr(desAngleAbs)))
 	print('Set: {0:3d} Mes: {1:3d} DesA: {2:.2f}  Prop: {3:.2f}  Integ: {4:.2f}  Deriv: {5:.2f}' \
-		.format(setpoint, cx, desAngle, prop, integ, deriv))
+		.format(setpoint, cx, desAngle, Kp * prop, Ki * integ, Kd * deriv))
 
 
 	ch = cv2.waitKey(1)
@@ -117,7 +111,4 @@ cap.release()
 
 cv2.destroyAllWindows() 
 
-
-#ser.write(str(unichr(92)))
-#time.sleep(1)
 
